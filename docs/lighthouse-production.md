@@ -60,6 +60,36 @@ The fixed production assets were confirmed live (`/robots.txt` now returns crawl
 | TBT | 480 ms | 1,050 ms |
 | CLS | 0 | 0 |
 
+## M5.1 performance optimization (2026-07-10)
+
+### Root cause and controlled change
+
+The production reports identified main-thread boot work as the limiting factor (Mobile `bootup-time` 4.6 s / `mainthread-work-breakdown` 8.0 s). The initial scene synchronously allocated the background starfield and full-capacity asteroid `InstancedMesh` before the primary solar-system frame could paint.
+
+M5.1 keeps the Sun, planets, Moon, controls, picking, and all HUD functions in the critical path. It defers **only decorative** starfield and asteroid-belt allocation until 450 ms after the first rendered frame. The renderer remains fully interactive before those details are added. Source maps are also disabled for the public production build, removing a 2.83 MB deploy artifact.
+
+A new unit regression test verifies that deferred decoration allocation does not occur until `activateDecorations()` is called. Full gates passed: typecheck, lint, **20/20** unit tests, production build, and static e2e smoke. Production browser visual verification showed the completed starfield, asteroid belt, planets, and controls, with no console errors.
+
+### Fresh post-M5.1 production audit
+
+| Form factor | Performance | Accessibility | Best Practices | SEO |
+|---|---:|---:|---:|---:|
+| Desktop (`--preset=desktop`) | **96** | **100** | **100** | **100** |
+| Mobile | **91** | **100** | **100** | **100** |
+
+| Metric | Desktop | Mobile |
+|---|---:|---:|
+| FCP | 0.4 s | 1.8 s |
+| LCP | 0.4 s | 1.9 s |
+| TBT | 170 ms | 310 ms |
+| Speed Index | 0.6 s | 2.9 s |
+| Interactive | 0.6 s | 2.3 s |
+| Main-thread work | 1.1 s | 3.7 s |
+| Bootup time | 0.7 s | 2.0 s |
+| CLS | 0 | 0 |
+
+The current release no longer has a performance-release blocker. Lighthouse scores will still vary modestly by browser/GPU load, so performance should be tracked as a trend rather than a single absolute number.
+
 ## Remaining performance opportunity
 
-The main performance opportunity remains Three.js parsing plus initial scene creation. Potential M5.1 work: defer nonessential star/belt creation until after first render, or split the renderer code into a dynamically imported chunk. This is not included in the current release because it would change the render initialization architecture.
+No further refactor is required for release. If a future version adds texture streaming, labels, or richer effects, keep those assets outside the first-paint path and rerun both Lighthouse form factors after each isolated change.
