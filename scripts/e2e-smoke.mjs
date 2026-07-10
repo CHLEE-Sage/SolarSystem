@@ -48,6 +48,7 @@ const required = [
   ['id="btn-reset-time"', 'reset time'],
   ['id="btn-reset-cam"', 'reset camera'],
   ['aria-label', 'aria labels present'],
+  ['aria-label="知道了，關閉操作提示"', 'tip accessible name includes visible label'],
   ['skip-link', 'skip link'],
 ];
 
@@ -55,6 +56,14 @@ for (const [needle, label] of required) {
   if (!html.includes(needle)) fail(`index.html missing ${label} (${needle})`);
   ok(`markup: ${label}`);
 }
+
+const robotsPath = join(dist, 'robots.txt');
+if (!existsSync(robotsPath)) fail('robots.txt missing from dist');
+const robots = readFileSync(robotsPath, 'utf8');
+if (!/^User-agent:\s*\*/m.test(robots) || !/^Allow:\s*\//m.test(robots)) {
+  fail('robots.txt does not allow valid crawler directives');
+}
+ok('robots.txt valid crawler directives');
 
 const assetsDir = join(dist, 'assets');
 if (!existsSync(assetsDir)) fail('dist/assets missing');

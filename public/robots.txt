@@ -1,0 +1,3 @@
+# Public portfolio showcase — allow search engines to crawl the static app.
+User-agent: *
+Allow: /

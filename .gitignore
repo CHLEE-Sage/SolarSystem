@@ -1,5 +1,6 @@
 node_modules
 dist
+reports/
 .hermes/
 .DS_Store
 *.local
