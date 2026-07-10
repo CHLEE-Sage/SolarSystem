@@ -29,12 +29,16 @@ export type SolarSystemHandle = {
   quality: ResolvedQuality;
   setScaleMode: (mode: ScaleMode) => void;
   setQuality: (preset: QualityPreset) => void;
+  /** Adds visual-only background details after the first usable frame. */
+  activateDecorations: () => void;
   update: (elapsedSimDays: number) => void;
   dispose: () => void;
 };
 
 export type CreateSolarSystemOptions = {
   quality?: QualityPreset;
+  /** Keep primary bodies interactive while deferring costly decorative meshes. */
+  deferDecorations?: boolean;
 };
 
 type Disposable = { dispose: () => void };
@@ -225,33 +229,44 @@ export function createSolarSystem(
   const mvpBodies = dataFile.bodies.filter((b) => b.isMvp && !b.proOnly);
   let scaleMode: ScaleMode = dataFile.scaleModeDefault ?? 'educational';
 
-  // Allocate starfield at high capacity; toggle draw range by quality.
+  // Decorative particles are deliberately optional during first paint.
   const starCapacity = QUALITY_PRESETS.high.starCount;
-  const starfield = createStarfield(starCapacity);
-  starfield.geometry.setDrawRange(0, quality.starCount);
-  root.add(starfield);
-  disposables.push(starfield.geometry, starfield.material as THREE.Material);
+  let starfield: THREE.Points | null = null;
+  let decorationsActive = false;
+  const createStarfieldDecoration = (): void => {
+    if (starfield) return;
+    starfield = createStarfield(starCapacity);
+    starfield.name = 'starfield';
+    starfield.geometry.setDrawRange(0, quality.starCount);
+    root.add(starfield);
+    disposables.push(starfield.geometry, starfield.material as THREE.Material);
+  };
 
   const beltCapacity = Math.max(
     QUALITY_PRESETS.high.beltCount,
     ...mvpBodies.filter((b) => b.type === 'belt').map((b) => b.beltCount ?? 0),
   );
+  const deferredBelts: BodyData[] = [];
+  const addBelt = (data: BodyData): void => {
+    const belt = createAsteroidBelt(data, disposables, beltCapacity);
+    fillAsteroidBelt(belt, data, scaleMode, quality.beltCount);
+    root.add(belt);
+    bodies.set(data.id, {
+      data,
+      orbitRoot: root,
+      bodyRoot: belt,
+      spinMesh: belt,
+      hitMesh: belt,
+      phase: 0,
+    });
+  };
 
   for (const data of mvpBodies) {
     if (data.type === 'moon') continue;
 
     if (data.type === 'belt') {
-      const belt = createAsteroidBelt(data, disposables, beltCapacity);
-      fillAsteroidBelt(belt, data, scaleMode, quality.beltCount);
-      root.add(belt);
-      bodies.set(data.id, {
-        data,
-        orbitRoot: root,
-        bodyRoot: belt,
-        spinMesh: belt,
-        hitMesh: belt,
-        phase: 0,
-      });
+      if (options.deferDecorations) deferredBelts.push(data);
+      else addBelt(data);
       continue;
     }
 
@@ -358,6 +373,15 @@ export function createSolarSystem(
     });
   }
 
+  const activateDecorations = (): void => {
+    if (decorationsActive) return;
+    decorationsActive = true;
+    createStarfieldDecoration();
+    for (const belt of deferredBelts) addBelt(belt);
+    deferredBelts.length = 0;
+  };
+  if (!options.deferDecorations) activateDecorations();
+
   const applyScaleMode = (mode: ScaleMode): void => {
     scaleMode = mode;
     for (const runtime of bodies.values()) {
@@ -378,10 +402,13 @@ export function createSolarSystem(
 
   const applyQuality = (preset: QualityPreset): void => {
     quality = preset;
-    starfield.geometry.setDrawRange(0, Math.min(preset.starCount, starCapacity));
-    const mat = starfield.material as THREE.PointsMaterial;
-    mat.size = preset.id === 'low' ? 0.48 : preset.id === 'medium' ? 0.4 : 0.38;
-    mat.opacity = preset.id === 'low' ? 0.8 : 0.92;
+    const activeStarfield = starfield;
+    if (activeStarfield) {
+      activeStarfield.geometry.setDrawRange(0, Math.min(preset.starCount, starCapacity));
+      const mat = activeStarfield.material as THREE.PointsMaterial;
+      mat.size = preset.id === 'low' ? 0.48 : preset.id === 'medium' ? 0.4 : 0.38;
+      mat.opacity = preset.id === 'low' ? 0.8 : 0.92;
+    }
 
     for (const runtime of bodies.values()) {
       if (runtime.data.type === 'belt' && runtime.spinMesh instanceof THREE.InstancedMesh) {
@@ -443,6 +470,7 @@ export function createSolarSystem(
     setQuality: (preset: QualityPreset) => {
       applyQuality(preset);
     },
+    activateDecorations,
     update,
     dispose: () => {
       for (const d of disposables) d.dispose();

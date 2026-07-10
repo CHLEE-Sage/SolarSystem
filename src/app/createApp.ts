@@ -166,7 +166,10 @@ export async function createApp(
   const dataFile = (await res.json()) as PlanetsFile;
 
   progress(55, '建構太陽系場景…');
-  const solar = createSolarSystem(dataFile, { quality: qualityPreset });
+  const solar = createSolarSystem(dataFile, {
+    quality: qualityPreset,
+    deferDecorations: true,
+  });
   scene.add(solar.root);
 
   const clock = new SimulationClock();
@@ -452,6 +455,8 @@ export async function createApp(
   let raf = 0;
   let disposed = false;
   let animElapsed = 0;
+  let decorationsScheduled = false;
+  let decorationsTimer: number | null = null;
 
   const onResize = (): void => {
     resizeRenderer(renderer, camera);
@@ -488,6 +493,14 @@ export async function createApp(
     highlight.update(animElapsed);
     if (!focusAnim.isAnimating()) controls.update();
     renderer.render(scene, camera);
+    if (!decorationsScheduled) {
+      decorationsScheduled = true;
+      // The primary interactive system has painted; add visual-only detail afterwards.
+      decorationsTimer = window.setTimeout(() => {
+        decorationsTimer = null;
+        if (!disposed) solar.activateDecorations();
+      }, 450);
+    }
 
     fpsMonitor.sample(dt);
     if (qualityMode === 'auto' && fpsMonitor.shouldDowngrade(40, 10)) {
@@ -509,6 +522,7 @@ export async function createApp(
     dispose: () => {
       disposed = true;
       cancelAnimationFrame(raf);
+      if (decorationsTimer !== null) window.clearTimeout(decorationsTimer);
       window.removeEventListener('resize', onResize);
       window.removeEventListener('keydown', onKey);
       controls.dispose();
