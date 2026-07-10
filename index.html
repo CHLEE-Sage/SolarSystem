@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="商業展示級 Three.js 太陽系模擬器 — 作品集 / 官網可嵌入 demo。教育尺度與接近真實 AU 切換。"
+    />
+    <meta name="theme-color" content="#03050c" />
+    <meta name="color-scheme" content="dark" />
+    <title>太陽系模擬器 · Solar System Showcase</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <a class="skip-link" href="#hud">跳到控制面板</a>
+
+    <div id="app">
+      <canvas id="webgl" tabindex="0" aria-label="太陽系 3D 場景，可點選行星"></canvas>
+
+      <div
+        id="loading"
+        class="loading"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <div class="loading__card">
+          <div class="loading__orbit" aria-hidden="true"></div>
+          <p class="loading__title">正在載入太陽系…</p>
+          <p id="loading-detail" class="loading__detail">初始化 WebGL 與天體資料</p>
+          <div class="loading__bar" aria-hidden="true">
+            <span id="loading-bar" class="loading__bar-fill"></span>
+          </div>
+        </div>
+      </div>
+
+      <div id="fallback" class="fallback" hidden role="alert">
+        <h2>無法啟動 3D 場景</h2>
+        <p id="fallback-message">
+          此瀏覽器或裝置不支援 WebGL。請改用最新版 Chrome、Edge、Firefox 或 Safari，並確認硬體加速已開啟。
+        </p>
+        <ul>
+          <li>支援教育尺度與接近真實 AU 距離切換</li>
+          <li>技術：Vite · TypeScript · three.js</li>
+        </ul>
+      </div>
+
+      <div id="tip" class="tip" role="status">
+        <p>
+          <strong>操作提示：</strong>拖曳旋轉 · 滾輪縮放 · <strong>點選行星</strong> ·
+          切換<strong>尺度／畫質</strong> · Esc 取消選取 · Home 重設視角
+        </p>
+        <button type="button" id="tip-close" class="tip__close" aria-label="關閉提示">
+          知道了
+        </button>
+      </div>
+
+      <div id="hud" class="hud" role="region" aria-label="控制面板">
+        <header class="hud__header">
+          <div class="hud__title-row">
+            <h1>太陽系模擬器</h1>
+            <button
+              type="button"
+              id="btn-hud-toggle"
+              class="btn btn--icon"
+              aria-expanded="true"
+              aria-controls="hud-body"
+              title="收合面板"
+            >
+              收合
+            </button>
+          </div>
+          <p id="hud-subtitle" class="hud__subtitle">展示模式 · 教育壓縮尺度 · M4</p>
+        </header>
+
+        <div id="hud-body" class="hud__body">
+          <p class="hud__about">
+            作品集／商業展示用 demo：太陽、8 行星、月球、土星環、小行星帶。可嵌入官網靜態頁。
+          </p>
+
+          <div class="hud__controls">
+            <button type="button" id="btn-play" class="btn" aria-pressed="true">暫停</button>
+            <button type="button" id="btn-reset-time" class="btn btn--ghost">重設時間</button>
+            <button type="button" id="btn-reset-cam" class="btn btn--ghost">重設視角</button>
+          </div>
+
+          <label class="field">
+            <span>尺度模式</span>
+            <select id="scale-mode" aria-describedby="scale-notice">
+              <option value="educational" selected>教育壓縮（預設）</option>
+              <option value="realisticAU">接近真實 AU 距離</option>
+            </select>
+          </label>
+
+          <p id="scale-notice" class="hud__notice" role="note">
+            目前為「教育壓縮尺度」：行星距離與半徑已調整，方便觀察排列。並非真實比例。
+          </p>
+
+          <label class="field">
+            <span>畫面品質</span>
+            <select id="quality-mode" aria-describedby="quality-notice">
+              <option value="auto" selected>自動（建議）</option>
+              <option value="high">高品質</option>
+              <option value="medium">平衡</option>
+              <option value="low">效能優先</option>
+            </select>
+          </label>
+          <p id="quality-notice" class="hud__hint">自動模式會在 FPS 偏低時降級畫質。</p>
+
+          <label class="field">
+            <span>時間倍率</span>
+            <select id="speed">
+              <option value="1">1×（慢）</option>
+              <option value="5">5×</option>
+              <option value="20" selected>20×</option>
+              <option value="80">80×（快）</option>
+              <option value="250">250×</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>聚焦天體</span>
+            <select id="body-focus">
+              <option value="">— 點選場景或選擇 —</option>
+            </select>
+          </label>
+
+          <div id="info" class="hud__info" aria-live="polite">載入中…</div>
+          <p id="status" class="hud__status" aria-live="polite">載入中…</p>
+          <p class="hud__kbd">鍵盤：Space 播放／暫停 · Esc 取消選取 · Home 全景</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

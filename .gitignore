@@ -1,0 +1,13 @@
+node_modules
+dist
+.hermes/
+.DS_Store
+*.local
+.env
+.env.*
+!.env.example
+coverage
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.log
