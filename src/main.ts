@@ -47,6 +47,7 @@ async function boot(): Promise<void> {
   const resetCamBtn = document.querySelector<HTMLButtonElement>('#btn-reset-cam');
   const speedSelect = document.querySelector<HTMLSelectElement>('#speed');
   const bodySelect = document.querySelector<HTMLSelectElement>('#body-focus');
+  const learningModeSelect = document.querySelector<HTMLSelectElement>('#learning-mode');
   const scaleSelect = document.querySelector<HTMLSelectElement>('#scale-mode');
   const qualitySelect = document.querySelector<HTMLSelectElement>('#quality-mode');
   const scaleNoticeEl = document.querySelector<HTMLElement>('#scale-notice');
@@ -72,8 +73,7 @@ async function boot(): Promise<void> {
   const webgl = detectWebGL();
   if (!webgl.ok) {
     showFallback(
-      webgl.reason ??
-        '此瀏覽器或裝置不支援 WebGL，無法啟動 3D 場景。請更新瀏覽器並開啟硬體加速。',
+      webgl.reason ?? '此瀏覽器或裝置不支援 WebGL，無法啟動 3D 場景。請更新瀏覽器並開啟硬體加速。',
     );
     return;
   }
@@ -88,6 +88,7 @@ async function boot(): Promise<void> {
         resetCamBtn,
         speedSelect,
         bodySelect,
+        learningModeSelect,
         scaleSelect,
         qualitySelect,
         scaleNoticeEl,

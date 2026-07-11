@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { APP_CONFIG } from '../config/appConfig';
 import {
+  cameraFarPlane,
   homeCameraDistance,
+  maxOrbitControlsDistance,
+  minOrbitControlsDistance,
   SCALE_MODE_COPY,
   type ScaleMode,
 } from '../core/math/scaleMapping';
@@ -22,12 +25,9 @@ import { createLights } from '../core/scene/createLights';
 import { createScene } from '../core/scene/createScene';
 import { SimulationClock } from '../core/time/SimulationClock';
 import { createFocusAnimator } from '../features/camera/focusCamera';
-import {
-  buildPickables,
-  pickBodyId,
-  pointerFromEvent,
-} from '../features/interaction/pickBody';
+import { buildPickables, pickBodyId, pointerFromEvent } from '../features/interaction/pickBody';
 import { SelectionHighlight } from '../features/interaction/selectionHighlight';
+import { renderLearningPanel } from '../features/learning/learningPanel';
 import { createSolarSystem } from '../features/solar-system/createSolarSystem';
 import type { BodyData, PlanetsFile } from '../types/bodies';
 
@@ -43,6 +43,7 @@ export type AppUi = {
   resetCamBtn: HTMLButtonElement | null;
   speedSelect: HTMLSelectElement | null;
   bodySelect: HTMLSelectElement | null;
+  learningModeSelect: HTMLSelectElement | null;
   scaleSelect: HTMLSelectElement | null;
   qualitySelect: HTMLSelectElement | null;
   scaleNoticeEl: HTMLElement | null;
@@ -66,8 +67,7 @@ function formatBodyInfo(data: BodyData, mode: ScaleMode): string {
     data.orbitalPeriodDays > 0
       ? `公轉約 ${data.orbitalPeriodDays.toLocaleString('zh-Hant')} 日`
       : '中心恆星';
-  const dist =
-    data.semiMajorAxisAU > 0 ? `平均距離 ${data.semiMajorAxisAU} AU · ` : '';
+  const dist = data.semiMajorAxisAU > 0 ? `平均距離 ${data.semiMajorAxisAU} AU · ` : '';
   const scaleNote =
     mode === 'realisticAU' && data.type === 'planet'
       ? '<br/><em class="muted">軌道距離：接近真實 AU；行星大小仍為展示放大。</em>'
@@ -83,6 +83,14 @@ function outerPlanetDistance(dataFile: PlanetsFile): number {
     if (b.type === 'planet' && b.displayDistance > max) max = b.displayDistance;
   }
   return max || 40;
+}
+
+function outerPlanetAU(dataFile: PlanetsFile): number {
+  let max = 0;
+  for (const b of dataFile.bodies) {
+    if (b.type === 'planet' && b.semiMajorAxisAU > max) max = b.semiMajorAxisAU;
+  }
+  return max || 30;
 }
 
 /** Buttons: isolate from canvas + OrbitControls. */
@@ -177,11 +185,15 @@ export async function createApp(
 
   let scaleMode: ScaleMode = dataFile.scaleModeDefault ?? 'educational';
   const outerEdu = outerPlanetDistance(dataFile);
+  const outerAU = outerPlanetAU(dataFile);
 
   const homeTarget = new THREE.Vector3(0, APP_CONFIG.viewTargetY, 0);
   const homePosFor = (mode: ScaleMode): THREE.Vector3 => {
     const dist = homeCameraDistance(mode, outerEdu);
-    return new THREE.Vector3(0, APP_CONFIG.cameraY, dist);
+    // Raise camera more in realistic mode so orbital plane is readable.
+    const y =
+      mode === 'realisticAU' ? Math.max(APP_CONFIG.cameraY * 2.2, dist * 0.22) : APP_CONFIG.cameraY;
+    return new THREE.Vector3(0, y, dist);
   };
   let homePos = homePosFor(scaleMode);
   camera.position.copy(homePos);
@@ -191,10 +203,17 @@ export async function createApp(
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
-  controls.minDistance = 6;
-  controls.maxDistance = scaleMode === 'realisticAU' ? 1200 : 180;
+  controls.enablePan = true;
+  controls.screenSpacePanning = true;
+  controls.zoomSpeed = 1.15;
+  controls.panSpeed = 0.9;
+  controls.rotateSpeed = 0.85;
+  controls.minDistance = minOrbitControlsDistance(scaleMode);
+  controls.maxDistance = maxOrbitControlsDistance(scaleMode, outerAU);
   controls.target.copy(homeTarget);
   controls.domElement = canvas;
+  camera.far = cameraFarPlane(scaleMode, outerAU);
+  camera.updateProjectionMatrix();
 
   const focusAnim = createFocusAnimator(camera, controls);
   const highlight = new SelectionHighlight();
@@ -209,11 +228,41 @@ export async function createApp(
   };
 
   let selectedId: string | null = null;
+  let learningMode = false;
+  const learningCompletionKey = 'solar-learning-completed-v1';
+  const completedTopics = new Set<string>(
+    (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(learningCompletionKey) ?? '[]');
+        return Array.isArray(saved)
+          ? saved.filter((id): id is string => typeof id === 'string')
+          : [];
+      } catch {
+        return [];
+      }
+    })(),
+  );
   const pointerDown = new THREE.Vector2();
   let dragging = false;
 
   const flashStatus = (msg: string): void => {
     if (ui.statusEl) ui.statusEl.textContent = msg;
+  };
+
+  const renderSelectedInfo = (): void => {
+    if (!ui.infoEl) return;
+    if (!selectedId) {
+      ui.infoEl.innerHTML = learningMode
+        ? '選擇太陽、行星或月球，開始一段與目前畫面連動的學習探索。'
+        : '點選行星或自選單聚焦，查看繁中簡介。';
+      return;
+    }
+    const runtime = solar.bodies.get(selectedId);
+    if (!runtime) return;
+    const bodyInfo = formatBodyInfo(runtime.data, scaleMode);
+    ui.infoEl.innerHTML = learningMode
+      ? `${bodyInfo}${renderLearningPanel(selectedId, completedTopics)}`
+      : bodyInfo;
   };
 
   const syncScaleUi = (): void => {
@@ -223,7 +272,7 @@ export async function createApp(
     }
     if (ui.scaleNoticeEl) ui.scaleNoticeEl.textContent = copy.notice;
     if (ui.subtitleEl) {
-      ui.subtitleEl.textContent = `展示模式 · ${copy.short} · ${QUALITY_PRESETS[resolvedQuality].label} · M4`;
+      ui.subtitleEl.textContent = `${learningMode ? '學習探索' : '展示'}模式 · ${copy.short} · ${QUALITY_PRESETS[resolvedQuality].label} · M4`;
     }
   };
 
@@ -256,16 +305,14 @@ export async function createApp(
       focusAnim.stopFollowing();
       highlight.clear();
       if (ui.bodySelect) ui.bodySelect.value = '';
-      if (ui.infoEl) {
-        ui.infoEl.innerHTML = '點選行星或自選單聚焦，查看繁中簡介。';
-      }
+      renderSelectedInfo();
       return;
     }
     const runtime = solar.bodies.get(id);
     if (!runtime) return;
     highlight.attach(runtime.bodyRoot, runtime.data.displayRadius);
     if (ui.bodySelect) ui.bodySelect.value = id;
-    if (ui.infoEl) ui.infoEl.innerHTML = formatBodyInfo(runtime.data, scaleMode);
+    renderSelectedInfo();
     if (fly) {
       focusAnim.focus({
         getWorldPosition: () => getRuntimeWorldPosition(runtime),
@@ -280,15 +327,17 @@ export async function createApp(
     solar.setScaleMode(mode);
     solar.update(clock.elapsedSimDays);
 
-    controls.maxDistance = mode === 'realisticAU' ? 1200 : 180;
+    controls.minDistance = minOrbitControlsDistance(mode);
+    controls.maxDistance = maxOrbitControlsDistance(mode, outerAU);
+    camera.far = cameraFarPlane(mode, outerAU);
+    camera.near = mode === 'realisticAU' ? 0.2 : APP_CONFIG.near;
+    camera.updateProjectionMatrix();
     homePos = homePosFor(mode);
     syncScaleUi();
 
     if (selectedId) {
       const runtime = solar.bodies.get(selectedId);
-      if (runtime && ui.infoEl) {
-        ui.infoEl.innerHTML = formatBodyInfo(runtime.data, scaleMode);
-      }
+      if (runtime) renderSelectedInfo();
       if (reframing && runtime) {
         focusAnim.focus({
           getWorldPosition: () => getRuntimeWorldPosition(runtime),
@@ -300,11 +349,7 @@ export async function createApp(
     }
 
     const copy = SCALE_MODE_COPY[mode];
-    flashStatus(
-      prev === mode
-        ? `已套用${copy.short}`
-        : `已切換為${copy.short} · 軌道距離已更新`,
-    );
+    flashStatus(prev === mode ? `已套用${copy.short}` : `已切換為${copy.short} · 軌道距離已更新`);
   };
 
   if (ui.bodySelect) {
@@ -360,6 +405,27 @@ export async function createApp(
     setSelected(id, true);
   });
 
+  bindHudSelect(ui.learningModeSelect, () => {
+    learningMode = ui.learningModeSelect?.value === 'learning';
+    syncScaleUi();
+    renderSelectedInfo();
+    flashStatus(learningMode ? '已開啟學習探索模式' : '已切回展示模式');
+  });
+
+  if (ui.infoEl) {
+    ui.infoEl.addEventListener('click', (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+        '[data-learning-complete]',
+      );
+      const topicId = button?.dataset.learningComplete;
+      if (!topicId) return;
+      if (completedTopics.has(topicId)) completedTopics.delete(topicId);
+      else completedTopics.add(topicId);
+      localStorage.setItem(learningCompletionKey, JSON.stringify([...completedTopics]));
+      renderSelectedInfo();
+    });
+  }
+
   bindHudSelect(ui.scaleSelect, () => {
     const raw = ui.scaleSelect?.value ?? 'educational';
     const mode: ScaleMode = raw === 'realisticAU' ? 'realisticAU' : 'educational';
@@ -368,7 +434,8 @@ export async function createApp(
 
   bindHudSelect(ui.qualitySelect, () => {
     const raw = (ui.qualitySelect?.value ?? 'auto') as QualityLevel;
-    qualityMode = raw === 'high' || raw === 'medium' || raw === 'low' || raw === 'auto' ? raw : 'auto';
+    qualityMode =
+      raw === 'high' || raw === 'medium' || raw === 'low' || raw === 'auto' ? raw : 'auto';
     const next = qualityMode === 'auto' ? preferred : qualityMode;
     fpsMonitor.reset();
     applyRenderQuality(next, true);
@@ -477,9 +544,7 @@ export async function createApp(
     }x · ${clock.isPlaying ? '播放中' : '已暫停'}${sel}`;
   };
 
-  if (ui.infoEl) {
-    ui.infoEl.innerHTML = '點選行星或自選單聚焦，查看繁中簡介。';
-  }
+  renderSelectedInfo();
 
   progress(92, '啟動渲染迴圈…');
 

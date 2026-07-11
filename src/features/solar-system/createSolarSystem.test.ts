@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { QUALITY_PRESETS } from '../../core/quality/qualityPresets';
 import { createSolarSystem } from './createSolarSystem';
@@ -47,6 +48,34 @@ const belt: BodyData = {
   proOnly: false,
 };
 
+const saturn: BodyData = {
+  id: 'saturn',
+  nameZh: '土星',
+  nameEn: 'Saturn',
+  type: 'planet',
+  parentId: 'sun',
+  radiusKm: 58232,
+  displayRadius: 1.15,
+  semiMajorAxisAU: 9.537,
+  displayDistance: 26,
+  orbitalPeriodDays: 10759,
+  rotationPeriodHours: 10.7,
+  axialTiltDeg: 26.73,
+  color: '#e8d5a3',
+  textureKey: null,
+  hasRings: true,
+  ring: {
+    innerScale: 1.35,
+    outerScale: 2.25,
+    color: '#cbb994',
+    opacity: 0.72,
+  },
+  descriptionZh: '有行星環',
+  order: 6,
+  isMvp: true,
+  proOnly: false,
+};
+
 const data: PlanetsFile = {
   version: 1,
   scaleModeDefault: 'educational',
@@ -67,6 +96,35 @@ describe('createSolarSystem progressive decorations', () => {
 
     expect(solar.root.getObjectByName('starfield')).toBeDefined();
     expect(solar.root.getObjectByName('asteroid-belt')).toBeDefined();
+    solar.dispose();
+  });
+});
+
+describe('createSolarSystem saturn rings', () => {
+  it('keeps planetary rings off the spinning mesh so fast rotation cannot jitter them', () => {
+    const solar = createSolarSystem(
+      {
+        version: 1,
+        scaleModeDefault: 'educational',
+        bodies: [sun, saturn],
+      },
+      { quality: QUALITY_PRESETS.medium },
+    );
+
+    const runtime = solar.bodies.get('saturn');
+    expect(runtime).toBeDefined();
+    const ring = runtime!.bodyRoot.getObjectByName('saturn-ring');
+    expect(ring).toBeInstanceOf(THREE.Mesh);
+    // Ring should follow the body, but not inherit surface spin.
+    expect(ring!.parent).toBe(runtime!.bodyRoot);
+    expect(runtime!.spinMesh.children.map((c) => c.name)).not.toContain('saturn-ring');
+
+    const before = ring!.quaternion.clone();
+    solar.update(3.25); // many Saturn spin revolutions at 10.7h period
+    // bodyRoot-local ring orientation must stay fixed while the planet spins.
+    expect(ring!.quaternion.equals(before)).toBe(true);
+    expect(runtime!.spinMesh.rotation.y).not.toBe(0);
+
     solar.dispose();
   });
 });

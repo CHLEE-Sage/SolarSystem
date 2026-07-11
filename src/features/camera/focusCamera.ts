@@ -7,7 +7,11 @@ export type FocusTarget = {
   displayRadius: number;
 };
 
-/** Smoothly move camera to a body, then keep its controls target following that body. */
+/**
+ * Smoothly move camera to a body, then keep the controls *target* following that body.
+ * After the fly-in, user orbit / wheel zoom must remain usable: we only translate the
+ * camera by the same delta as the target moves, preserving the user's relative offset.
+ */
 export function createFocusAnimator(
   camera: THREE.PerspectiveCamera,
   controls: OrbitControls,
@@ -29,10 +33,11 @@ export function createFocusAnimator(
   const fromTarget = new THREE.Vector3();
   const toTarget = new THREE.Vector3();
   const followOffset = new THREE.Vector3();
+  const lastFollowTarget = new THREE.Vector3();
   let getFollowPosition: (() => THREE.Vector3) | null = null;
+  let hasLastFollowTarget = false;
 
-  const easeInOut = (x: number): number =>
-    x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+  const easeInOut = (x: number): number => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
 
   const startAnim = (nextPos: THREE.Vector3, nextTarget: THREE.Vector3): void => {
     fromPos.copy(camera.position);
@@ -45,6 +50,7 @@ export function createFocusAnimator(
 
   const stopFollowing = (): void => {
     getFollowPosition = null;
+    hasLastFollowTarget = false;
     active = false;
     t = 1;
   };
@@ -62,6 +68,7 @@ export function createFocusAnimator(
       const dist = Math.max(target.displayRadius * 12, 4.5);
       followOffset.set(dist * 0.55, dist * 0.38, dist * 0.95);
       getFollowPosition = target.getWorldPosition;
+      hasLastFollowTarget = false;
       startAnim(nextTarget.clone().add(followOffset), nextTarget);
     },
     resetHome: (homePos, homeTarget) => {
@@ -84,15 +91,36 @@ export function createFocusAnimator(
         camera.position.lerpVectors(fromPos, toPos, k);
         controls.target.lerpVectors(fromTarget, toTarget, k);
         controls.update();
-        if (t >= 1) active = false;
+        if (t >= 1) {
+          active = false;
+          if (liveTarget) {
+            lastFollowTarget.copy(liveTarget);
+            hasLastFollowTarget = true;
+          }
+        }
         return;
       }
 
-      // After fly-in, keep the same viewing offset while following orbital motion.
+      // After fly-in: track body motion without destroying user zoom/orbit.
       if (liveTarget) {
-        controls.target.copy(liveTarget);
-        camera.position.copy(liveTarget).add(followOffset);
-        controls.update();
+        if (!hasLastFollowTarget) {
+          lastFollowTarget.copy(controls.target);
+          hasLastFollowTarget = true;
+        }
+        const dx = liveTarget.x - lastFollowTarget.x;
+        const dy = liveTarget.y - lastFollowTarget.y;
+        const dz = liveTarget.z - lastFollowTarget.z;
+        if (dx !== 0 || dy !== 0 || dz !== 0) {
+          controls.target.set(liveTarget.x, liveTarget.y, liveTarget.z);
+          camera.position.x += dx;
+          camera.position.y += dy;
+          camera.position.z += dz;
+          lastFollowTarget.copy(liveTarget);
+          controls.update();
+        } else {
+          // Still keep target latched even if body is momentarily still.
+          controls.target.copy(liveTarget);
+        }
       }
     },
     isAnimating: () => active,

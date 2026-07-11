@@ -18,13 +18,7 @@
     <div id="app">
       <canvas id="webgl" tabindex="0" aria-label="太陽系 3D 場景，可點選行星"></canvas>
 
-      <div
-        id="loading"
-        class="loading"
-        role="status"
-        aria-live="polite"
-        aria-busy="true"
-      >
+      <div id="loading" class="loading" role="status" aria-live="polite" aria-busy="true">
         <div class="loading__card">
           <div class="loading__orbit" aria-hidden="true"></div>
           <p class="loading__title">正在載入太陽系…</p>
@@ -38,7 +32,8 @@
       <div id="fallback" class="fallback" hidden role="alert">
         <h2>無法啟動 3D 場景</h2>
         <p id="fallback-message">
-          此瀏覽器或裝置不支援 WebGL。請改用最新版 Chrome、Edge、Firefox 或 Safari，並確認硬體加速已開啟。
+          此瀏覽器或裝置不支援 WebGL。請改用最新版 Chrome、Edge、Firefox 或
+          Safari，並確認硬體加速已開啟。
         </p>
         <ul>
           <li>支援教育尺度與接近真實 AU 距離切換</li>
@@ -48,8 +43,9 @@
 
       <div id="tip" class="tip" role="status">
         <p>
-          <strong>操作提示：</strong>拖曳旋轉 · 滾輪縮放 · <strong>點選行星</strong> ·
-          切換<strong>尺度／畫質</strong> · Esc 取消選取 · Home 重設視角
+          <strong>操作提示：</strong>左鍵旋轉 · 滾輪縮放 · 右鍵平移 · <strong>點選行星</strong> ·
+          切換<strong>尺度／畫質</strong>
+          · Esc 取消選取 · Home 重設視角
         </p>
         <button type="button" id="tip-close" class="tip__close" aria-label="知道了，關閉操作提示">
           知道了
@@ -125,6 +121,17 @@
               <option value="">— 點選場景或選擇 —</option>
             </select>
           </label>
+
+          <label class="field">
+            <span>內容模式</span>
+            <select id="learning-mode" aria-describedby="learning-mode-notice">
+              <option value="showcase" selected>展示</option>
+              <option value="learning">學習探索</option>
+            </select>
+          </label>
+          <p id="learning-mode-notice" class="hud__hint">
+            學習探索會將選取天體連結到適齡概念、觀察任務與先備知識。
+          </p>
 
           <div id="info" class="hud__info" aria-live="polite">載入中…</div>
           <p id="status" class="hud__status" aria-live="polite">載入中…</p>

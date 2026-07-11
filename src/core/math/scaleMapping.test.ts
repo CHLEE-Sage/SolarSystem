@@ -3,7 +3,9 @@ import type { BodyData } from '../../types/bodies';
 import {
   AU_SCENE_UNITS,
   beltRadialRange,
+  cameraFarPlane,
   homeCameraDistance,
+  maxOrbitControlsDistance,
   orbitDistance,
 } from './scaleMapping';
 
@@ -69,6 +71,16 @@ describe('scaleMapping', () => {
   it('frames home camera farther in realistic mode', () => {
     expect(homeCameraDistance('realisticAU', 37.5)).toBeGreaterThan(
       homeCameraDistance('educational', 37.5),
+    );
+  });
+
+  it('exposes orbit/camera limits large enough for outer planets in realistic mode', () => {
+    const neptuneOrbit = orbitDistance(neptune, 'realisticAU');
+    expect(maxOrbitControlsDistance('realisticAU', neptune.semiMajorAxisAU)).toBeGreaterThan(
+      neptuneOrbit * 1.2,
+    );
+    expect(cameraFarPlane('realisticAU', neptune.semiMajorAxisAU)).toBeGreaterThan(
+      neptuneOrbit * 2,
     );
   });
 });

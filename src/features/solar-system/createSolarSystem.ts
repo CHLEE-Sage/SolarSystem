@@ -1,10 +1,6 @@
 import * as THREE from 'three';
 import { orbitalAngle, seededRandom, spinAngle } from '../../core/math/orbitalMath';
-import {
-  beltRadialRange,
-  orbitDistance,
-  type ScaleMode,
-} from '../../core/math/scaleMapping';
+import { beltRadialRange, orbitDistance, type ScaleMode } from '../../core/math/scaleMapping';
 import {
   QUALITY_PRESETS,
   type QualityPreset,
@@ -320,8 +316,15 @@ export function createSolarSystem(
     bodyRoot.add(spinMesh);
     disposables.push(spinMesh.geometry, spinMesh.material as THREE.Material);
 
+    // Planetary rings belong on bodyRoot, not spinMesh: surface spin is far faster
+    // than orbital motion and makes transparent double-sided rings look like jitter.
     const ring = createSaturnRing(data, disposables, quality.ringSegments);
-    if (ring) spinMesh.add(ring);
+    if (ring) {
+      if (data.axialTiltDeg) {
+        ring.rotation.z = THREE.MathUtils.degToRad(data.axialTiltDeg * 0.25);
+      }
+      bodyRoot.add(ring);
+    }
 
     const hitMesh = createHitProxy(data.displayRadius, bodyRoot, disposables);
     hitMesh.userData.bodyId = data.id;
@@ -384,6 +387,8 @@ export function createSolarSystem(
 
   const applyScaleMode = (mode: ScaleMode): void => {
     scaleMode = mode;
+    // Keep planets readable when orbital gaps explode; still not true size.
+    const bodyScale = mode === 'realisticAU' ? 1.85 : 1;
     for (const runtime of bodies.values()) {
       const { data, bodyRoot, orbitLine, spinMesh } = runtime;
       if (data.type === 'star') continue;
@@ -396,7 +401,16 @@ export function createSolarSystem(
 
       const dist = orbitDistance(data, mode);
       bodyRoot.position.set(dist, 0, 0);
-      if (orbitLine) resizeOrbitLine(orbitLine, dist);
+      if (orbitLine) {
+        resizeOrbitLine(orbitLine, dist);
+        const lineMat = orbitLine.material as THREE.LineBasicMaterial;
+        lineMat.opacity = mode === 'realisticAU' ? 0.55 : quality.id === 'low' ? 0.22 : 0.38;
+        lineMat.color.setHex(mode === 'realisticAU' ? 0x8fb4ff : 0x5b6b88);
+      }
+      // Spin mesh + rings live under bodyRoot; scale the visual planet, not the orbit.
+      spinMesh.scale.setScalar(bodyScale);
+      const ring = bodyRoot.getObjectByName(`${data.id}-ring`);
+      if (ring) ring.scale.setScalar(bodyScale);
     }
   };
 
@@ -421,7 +435,13 @@ export function createSolarSystem(
       }
       if (runtime.orbitLine) {
         const lineMat = runtime.orbitLine.material as THREE.LineBasicMaterial;
-        lineMat.opacity = preset.id === 'low' ? 0.22 : 0.38;
+        if (scaleMode === 'realisticAU') {
+          lineMat.opacity = 0.55;
+          lineMat.color.setHex(0x8fb4ff);
+        } else {
+          lineMat.opacity = preset.id === 'low' ? 0.22 : 0.38;
+          lineMat.color.setHex(0x5b6b88);
+        }
       }
     }
   };
